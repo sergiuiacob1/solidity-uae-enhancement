@@ -95,7 +95,6 @@ private:
 	std::vector<test_suite*> m_path;
 };
 
-
 void runTestCase(TestCase::Config const& _config, TestCase::TestCaseCreator const& _testCaseCreator)
 {
 	try
@@ -108,6 +107,7 @@ void runTestCase(TestCase::Config const& _config, TestCase::TestCaseCreator cons
 				case TestCase::TestResult::Success:
 					break;
 				case TestCase::TestResult::Failure:
+					solidity::test::printOptions(errorStream, "", solidity::test::CommonOptions::get());
 					BOOST_ERROR("Test expectation mismatch.\n" + errorStream.str());
 					break;
 				case TestCase::TestResult::FatalError:

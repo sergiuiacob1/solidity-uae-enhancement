@@ -207,6 +207,19 @@ bool CommonOptions::parse(int argc, char const* const* argv)
 	return true;
 }
 
+std::string CommonOptions::toString() const
+{
+	std::stringstream options;
+	if(m_singleton)
+	{
+		options << "evmVersion=" << evmVersion().name() <<
+			", optimize=" << (optimize ? "true" : "false") <<
+			", useABIEncoderV1=" << (useABIEncoderV1 ? "true" : "false") <<
+			", batch=" << (selectedBatch+1) << "/"  << batches;
+	}
+
+	return options.str();
+}
 
 langutil::EVMVersion CommonOptions::evmVersion() const
 {
@@ -275,6 +288,11 @@ bool loadVMs(CommonOptions const& _options)
 		return false;
 	}
 	return true;
+}
+
+void printOptions(std::ostream& _stream, std::string const& _linePrefix, CommonOptions const& _options)
+{
+	_stream << _linePrefix << "Run Settings: " << _options.toString() << std::endl;
 }
 
 }

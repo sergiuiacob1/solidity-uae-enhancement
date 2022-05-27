@@ -81,6 +81,10 @@ struct CommonOptions
 	// Throws a ConfigException on error
 	virtual void validate() const;
 
+	//@returns string with a key=value list of the options separated by comma
+	// Ex.: "evmVersion=london, optimitze=true, useABIEncoderV1=false"
+	virtual std::string toString() const;
+
 	static CommonOptions const& get();
 	static void setSingleton(std::unique_ptr<CommonOptions const>&& _instance);
 
@@ -101,6 +105,8 @@ private:
 bool isValidSemanticTestPath(boost::filesystem::path const& _testPath);
 
 bool loadVMs(CommonOptions const& _options);
+
+void printOptions(std::ostream& _stream, std::string const& _linePrefix, CommonOptions const& _options);
 
 /**
  * Component to help with splitting up all tests into batches.

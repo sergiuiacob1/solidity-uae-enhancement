@@ -178,7 +178,7 @@ TestTool::Result TestTool::process()
 						AnsiColorized(cout, formatted, {BOLD, CYAN}) << "  Contract:" << endl;
 						m_test->printSource(cout, "    ", formatted);
 						m_test->printSettings(cout, "    ", formatted);
-
+						solidity::test::printOptions(cout, "    ", m_options);
 						cout << endl << outputMessages.str() << endl;
 						return result == TestCase::TestResult::FatalError ? Result::Exception : Result::Failure;
 				}
