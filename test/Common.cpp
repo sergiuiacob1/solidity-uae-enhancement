@@ -207,18 +207,37 @@ bool CommonOptions::parse(int argc, char const* const* argv)
 	return true;
 }
 
-std::string CommonOptions::toString() const
+std::string CommonOptions::toString(const std::vector<std::string>& _filter) const
 {
 	std::stringstream options;
-	if(m_singleton)
+	if(!m_singleton || _filter.empty())
+		return "";
+
+	//Using std::map to avoid if-else/switch-case block
+	std::map<std::string, std::string> option_value_str = {
+		{"evmVersion", "evmVersion=" + evmVersion().name()},
+		{"optimize", "optimize=" + boolToString(optimize)},
+		{"useABIEncoderV1", "useABIEncoderV1=" + boolToString(useABIEncoderV1)},
+		{"batch", "batch=" + std::to_string(selectedBatch+1) + "/" + std::to_string(batches)},
+		{"ewasm", "ewasm=" + boolToString(ewasm)},
+		{"enforceCompileToEwasm", "enforceCompileToEwasm=" + boolToString(enforceCompileToEwasm)},
+		{"enforceGasTest", "enforceGasTest=" + boolToString(enforceGasTest)},
+		{"enforceGasTestMinValue", "enforceGasTestMinValue=" + enforceGasTestMinValue.str()},
+		{"disableSemanticTests", "disableSemanticTests=" + boolToString(disableSemanticTests)},
+		{"disableSMT", "disableSMT=" + boolToString(disableSMT)},
+		{"showMessages", "showMessages=" + boolToString(showMessages)},
+		{"showMetadata", "showMetadata=" + boolToString(showMetadata)}
+	};
+
+	for(auto optionName : _filter)
 	{
-		options << "evmVersion=" << evmVersion().name() <<
-			", optimize=" << (optimize ? "true" : "false") <<
-			", useABIEncoderV1=" << (useABIEncoderV1 ? "true" : "false") <<
-			", batch=" << (selectedBatch+1) << "/"  << batches;
+		auto opt = option_value_str.find(optionName);
+		if(opt != option_value_str.end())
+			options << opt->second << ", ";
 	}
 
-	return options.str();
+	std::string optionsStr = options.str();
+	return optionsStr.erase(optionsStr.size()-2); //erase extra ', '
 }
 
 langutil::EVMVersion CommonOptions::evmVersion() const
@@ -290,9 +309,14 @@ bool loadVMs(CommonOptions const& _options)
 	return true;
 }
 
+void printOptions(std::ostream& _stream, std::string const& _linePrefix, CommonOptions const& _options, const std::vector<std::string>& _filter)
+{
+	_stream << _linePrefix << "Run Settings: " << _options.toString(_filter) << std::endl;
+}
+
 void printOptions(std::ostream& _stream, std::string const& _linePrefix, CommonOptions const& _options)
 {
-	_stream << _linePrefix << "Run Settings: " << _options.toString() << std::endl;
+	printOptions(_stream, _linePrefix, _options, {"evmVersion", "optimize", "useABIEncoderV1", "batch"});
 }
 
 }
