@@ -78,78 +78,18 @@ void UnusedAssignEliminator::operator()(FunctionDefinition const& _functionDefin
 
 void UnusedAssignEliminator::operator()(Leave const&)
 {
-	cout << "am dat visit la leave"
-		 << "\n";
 	for (YulString name: m_returnVariables)
 		changeUndecidedTo(name, State::Used);
-
-	// TODO all assignments that are undecided should be marked as unused
-	// for
-}
-
-// TrackedStore == std::map<YulString, std::map<Statement const*, State>>;
-void UnusedAssignEliminator::getNewAssignmentsInBlock(
-	TrackedStores const& outerScopeStores, TrackedStores & blockScopeStores)
-{
-	cout << "verific new assignments\n";
-	for (auto it = blockScopeStores.begin(); it != blockScopeStores.end(); it++)
-	{
-		auto varName = it->first;
-		// cout << "verific " << varName.str() << "\n";
-		if (!outerScopeStores.count(varName))
-		{
-			// cout << "new var in town: " << varName.str() << "\n";
-			// this is a newly declared variable – will be handled by the UnusedPruner, if necessary
-			// using namespace solidity::util;
-			// YulString const* oldValue = util::valueOrNullptr(_older, key);
-		}
-		else
-		// TODO ce se intampla daca am acelasi assignment si in outer scope, si in block scope?
-		// acelasi gen aceeasi_var = aceeasi_val
-		{
-			// search for new assignments
-			std::map<Statement const*, State> blockScopeStatements = blockScopeStores.at(varName);
-			std::map<Statement const*, State> outerScopeStatements = outerScopeStores.at(varName);
-			for (auto stmtIterator = blockScopeStatements.begin(); stmtIterator != blockScopeStatements.end();
-				 stmtIterator++)
-			{
-				Statement const* stmt = stmtIterator->first;
-				if (!outerScopeStatements.count(stmt))
-				{
-					// cout << "mark " << varName.str() << " cu state-ul "
-						//  << stmtIterator->second.getValue() << "\n";
-					if (std::strcmp(stmtIterator->second.getValue(), "Undecided") == 0){
-						std::visit([](const auto& var) { cout << "marked stmt " << AsmPrinter()(var) << " as unused\n"; }, *stmt);
-						// stmtIterator->second = State::Unused;
-						blockScopeStatements[stmt] = State::Unused;
-						blockScopeStores[varName] = blockScopeStatements;
-					}
-				}
-			}
-
-			// auto varStatements = blockScopeStores.find(varName).second;
-			// for (auto blockAssignStmt = varStatements.begin(); blockAssignStmt != varStatements.end();
-			// blockAssignStmt++)
-		}
-	}
-
-	cout << "printing stores right after marking that shit as undecided\n";
-	UnusedAssignEliminator::printTrackedStores(blockScopeStores);
-	// return null;
 }
 
 void UnusedAssignEliminator::operator()(Block const& _block)
 {
 	ScopedSaveAndRestore outerDeclaredVariables(m_declaredVariables, {});
-
-
-	// _block.statements.empty() ||
-	// 	// TODO 2nd parameter was &m_controlFlowSideEffects
-
-	cout << "visiting block " << AsmPrinter()(_block) << "\n";
-
 	TrackedStores beforeBlockVisitStores{m_stores};
 
+	// TODO 2nd parameter was &m_controlFlowSideEffects <- does it matter?
+
+	// TODO do side effects matter?
 	if (!_block.statements.empty())
 	{
 		TerminationFinder::ControlFlow controlFlowKind = TerminationFinder{this->m_dialect}.controlFlowKind(
@@ -178,20 +118,15 @@ void UnusedAssignEliminator::operator()(Block const& _block)
 
 	UnusedStoreBase::operator()(_block);
 
-	// cout << "Printing tracked stores...\n";
-	// for (auto it = this->m_stores.begin(); it != this->m_stores.end(); it++) {
-	// 	cout << (*it).first.str() << " ";
-	// }
-	// cout << "\n";
-
-	// TODO sa scriu de ce nu mergea sa pun pe unused aici – daca mai e cazul
-	this->getNewAssignmentsInBlock(beforeBlockVisitStores, this->m_stores);
+	if (!_block.statements.empty() && this->blockHasTerminationFlow(_block))
+	{
+		this->setNewBlockAssignmentsToUnused(beforeBlockVisitStores, this->m_stores);
+	}
 
 	cout << "Printing tracked stores before UnusedStoreBase visited...\n";
 	UnusedAssignEliminator::printTrackedStores(beforeBlockVisitStores);
 	cout << "Printing tracked stores after UnusedStoreBase visited...\n";
 	UnusedAssignEliminator::printTrackedStores(this->m_stores);
-
 
 
 	// cout << "Printing declared variables after UnusedStoreBase visited...\n";
@@ -205,22 +140,6 @@ void UnusedAssignEliminator::operator()(Block const& _block)
 	for (auto const& var: m_declaredVariables)
 		finalize(var, State::Unused);
 }
-
-void UnusedAssignEliminator::printTrackedStores(TrackedStores const& stores) {
-	for (auto it = stores.begin(); it != stores.end(); it++)
-	{
-		auto varName = it->first.str();
-		cout << "\t" << varName << "\n";
-		for (auto it2 = it->second.begin(); it2 != it->second.end(); it2++)
-		{
-			Statement const* stmt = it2->first;
-			std::visit([](const auto& var) { cout << "\t\t" << AsmPrinter()(var); }, *stmt);
-			cout << " --- " << it2->second.getValue() << "\n";
-		}
-	}
-	cout << "\n";
-}
-
 
 void UnusedAssignEliminator::visit(Statement const& _statement)
 {
@@ -317,4 +236,69 @@ void UnusedAssignEliminator::finalize(YulString _variable, UnusedAssignEliminato
 		if ((state == State::Unused || (state == State::Undecided && _finalState == State::Unused))
 			&& SideEffectsCollector{m_dialect, *std::get<Assignment>(*statement).value}.movable())
 			m_pendingRemovals.insert(statement);
+}
+
+
+// TrackedStore == std::map<YulString, std::map<Statement const*, State>>;
+void UnusedAssignEliminator::setNewBlockAssignmentsToUnused(
+	TrackedStores const& outerScopeStores, TrackedStores& blockScopeStores)
+{
+	for (auto it = blockScopeStores.begin(); it != blockScopeStores.end(); it++)
+	{
+		auto varName = it->first;
+		if (!outerScopeStores.count(varName))
+		{
+			// the block declared a new variable
+			// nothing to do here – if unused, will be cleaned up by UnusedPruner
+			// TODO test that this is so
+		}
+		else
+		// TODO ce se intampla daca am acelasi assignment si in outer scope, si in block scope?
+		// acelasi gen aceeasi_var = aceeasi_val
+		{
+			// search for new assignments
+			std::map<Statement const*, State> blockScopeStatements = blockScopeStores.at(varName);
+			std::map<Statement const*, State> outerScopeStatements = outerScopeStores.at(varName);
+			for (auto stmtIterator = blockScopeStatements.begin(); stmtIterator != blockScopeStatements.end();
+				 stmtIterator++)
+			{
+				Statement const* stmt = stmtIterator->first;
+				if (!outerScopeStatements.count(stmt))
+				{
+					if (std::strcmp(stmtIterator->second.getValue(), "Undecided") == 0)
+					{
+						std::visit(
+							[](const auto& var) { cout << "marked statement " << AsmPrinter()(var) << " as unused\n"; },
+							*stmt);
+						blockScopeStatements[stmt] = State::Unused;
+						blockScopeStores[varName] = blockScopeStatements;
+					}
+				}
+			}
+		}
+	}
+}
+
+bool UnusedAssignEliminator::blockHasTerminationFlow(Block const& _block)
+{
+	return TerminationFinder{this->m_dialect}.controlFlowKind(_block.statements.back())
+		   == TerminationFinder::ControlFlow::Leave;
+	// TODO also account for revert / stop instructions
+}
+
+
+void UnusedAssignEliminator::printTrackedStores(TrackedStores const& stores)
+{
+	for (auto it = stores.begin(); it != stores.end(); it++)
+	{
+		auto varName = it->first.str();
+		cout << "\t" << varName << "\n";
+		for (auto it2 = it->second.begin(); it2 != it->second.end(); it2++)
+		{
+			Statement const* stmt = it2->first;
+			std::visit([](const auto& var) { cout << "\t\t" << AsmPrinter()(var); }, *stmt);
+			cout << " --- " << it2->second.getValue() << "\n";
+		}
+	}
+	cout << "\n";
 }

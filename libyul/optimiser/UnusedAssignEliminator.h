@@ -135,7 +135,8 @@ private:
 	/// break and continue TrackedStores.
 	void finalize(YulString _variable, State _finalState);
 
-	void getNewAssignmentsInBlock(TrackedStores const&, TrackedStores &);
+	bool blockHasTerminationFlow(Block const&);
+	void setNewBlockAssignmentsToUnused(TrackedStores const&, TrackedStores&);
 	void printTrackedStores(TrackedStores const&);
 
 
