@@ -207,9 +207,8 @@ bool CommonOptions::parse(int argc, char const* const* argv)
 	return true;
 }
 
-std::string CommonOptions::toString(const std::vector<std::string>& _filter) const
+std::string CommonOptions::toString(std::vector<std::string> const& _filter) const
 {
-	std::string options;
 	if(!m_singleton || _filter.empty())
 		return "";
 
@@ -229,7 +228,8 @@ std::string CommonOptions::toString(const std::vector<std::string>& _filter) con
 		{"showMetadata", "showMetadata=" + boolToString(showMetadata)}
 	};
 
-	for(const std::string& optionName : _filter)
+	std::string options;
+	for(std::string const& optionName : _filter)
 	{
 		auto opt = option_value_map.find(optionName);
 		if(opt != option_value_map.end())
@@ -312,7 +312,7 @@ bool loadVMs(CommonOptions const& _options)
 	return true;
 }
 
-void printOptions(std::ostream& _stream, std::string const& _linePrefix, CommonOptions const& _options, const std::vector<std::string>& _filter)
+void printOptions(std::ostream& _stream, std::string const& _linePrefix, CommonOptions const& _options, std::vector<std::string> const& _filter)
 {
 	_stream << _linePrefix << "Run Settings: " << _options.toString(_filter) << std::endl;
 }
