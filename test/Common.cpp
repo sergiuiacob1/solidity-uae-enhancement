@@ -209,12 +209,12 @@ bool CommonOptions::parse(int argc, char const* const* argv)
 
 std::string CommonOptions::toString(const std::vector<std::string>& _filter) const
 {
-	std::stringstream options;
+	std::string options;
 	if(!m_singleton || _filter.empty())
 		return "";
 
 	//Using std::map to avoid if-else/switch-case block
-	std::map<std::string, std::string> option_value_str = {
+	std::map<std::string, std::string> option_value_map = {
 		{"evmVersion", "evmVersion=" + evmVersion().name()},
 		{"optimize", "optimize=" + boolToString(optimize)},
 		{"useABIEncoderV1", "useABIEncoderV1=" + boolToString(useABIEncoderV1)},
@@ -229,15 +229,18 @@ std::string CommonOptions::toString(const std::vector<std::string>& _filter) con
 		{"showMetadata", "showMetadata=" + boolToString(showMetadata)}
 	};
 
-	for(auto optionName : _filter)
+	for(const std::string& optionName : _filter)
 	{
-		auto opt = option_value_str.find(optionName);
-		if(opt != option_value_str.end())
-			options << opt->second << ", ";
+		auto opt = option_value_map.find(optionName);
+		if(opt != option_value_map.end())
+			options.append(opt->second + ", ");
 	}
 
-	std::string optionsStr = options.str();
-	return optionsStr.erase(optionsStr.size()-2); //erase extra ', '
+	//erase extra ', '
+	if(!options.empty())
+		options.erase(options.size()-2);
+
+	return options;
 }
 
 langutil::EVMVersion CommonOptions::evmVersion() const
