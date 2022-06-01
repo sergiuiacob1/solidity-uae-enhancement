@@ -186,6 +186,7 @@ TerminationFinder::ControlFlow TerminationFinder::controlFlowKind(Statement cons
 		std::get<VariableDeclaration>(_statement).value &&
 		containsNonContinuingFunctionCall(*std::get<VariableDeclaration>(_statement).value)
 	)
+		// TODO aici cum se verifica daca un flow e terminate
 		return ControlFlow::Terminate;
 	else if (
 		holds_alternative<Assignment>(_statement) &&

@@ -64,6 +64,15 @@ protected:
 		State(Value _value = Undecided): m_value(_value) {}
 		inline bool operator==(State _other) const { return m_value == _other.m_value; }
 		inline bool operator!=(State _other) const { return !operator==(_other); }
+
+		char const* getValue() const {
+			if (m_value == Value::Unused) {
+				return "Unused";
+			} else if (m_value == Value::Undecided) {
+				return "Undecided";
+			}
+			return "Used";
+		}
 		static inline void join(State& _a, State const& _b)
 		{
 			// Using "max" works here because of the order of the values in the enum.
