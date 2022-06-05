@@ -15,11 +15,12 @@
 	along with solidity.  If not, see <http://www.gnu.org/licenses/>.
 */
 // SPDX-License-Identifier: GPL-3.0
-#include <libyul/optimiser/StructuralSimplifier.h>
-#include <libyul/AST.h>
-#include <libyul/Utilities.h>
 #include <libsolutil/CommonData.h>
 #include <libsolutil/Visitor.h>
+#include <libyul/AST.h>
+#include <libyul/AsmPrinter.h>
+#include <libyul/Utilities.h>
+#include <libyul/optimiser/StructuralSimplifier.h>
 
 using namespace std;
 using namespace solidity;
@@ -79,40 +80,112 @@ bool expressionAlwaysFalse(Expression const& _expression)
 		return false;
 }
 
+bool blockHasIfTerminationFlow(Block& _block)
+{
+	if (_block.statements.empty())
+	{
+		return false;
+	}
+
+	Statement& lastStmt = _block.statements.back();
+	return std::visit(
+		util::GenericVisitor{
+			[&](If& _ifStmt) -> bool
+			{
+				if (_ifStmt.body.statements.size() != 1)
+				{
+					return false;
+				}
+				Statement const& _lastIfStmt = _ifStmt.body.statements.back();
+				return std::visit(
+					util::GenericVisitor{
+						[&](Leave const&) -> bool { return true; },
+						[&](auto const&) -> bool { return false; },
+					},
+					_lastIfStmt);
+			},
+
+			[&](auto const&) -> bool { return false; },
+		},
+		lastStmt);
 }
 
-void StructuralSimplifier::run(OptimiserStepContext&, Block& _ast)
+OptionalStatements simplifyBlockTrailingIfTermination(FunctionDefinition& _funcDef)
 {
-	StructuralSimplifier{}(_ast);
+	_funcDef.body.statements.pop_back();
+	return {util::make_vector<Statement>(std::move(_funcDef))};
 }
 
-void StructuralSimplifier::operator()(Block& _block)
-{
-	simplify(_block.statements);
 }
+
+void StructuralSimplifier::run(OptimiserStepContext&, Block& _ast) { StructuralSimplifier{}(_ast); }
+
+void StructuralSimplifier::operator()(Block& _block) { simplify(_block.statements); }
 
 void StructuralSimplifier::simplify(std::vector<yul::Statement>& _statements)
 {
 	util::GenericVisitor visitor{
 		util::VisitorFallback<OptionalStatements>{},
-		[&](If& _ifStmt) -> OptionalStatements {
+		[&](If& _ifStmt) -> OptionalStatements
+		{
 			if (expressionAlwaysTrue(*_ifStmt.condition))
 				return {std::move(_ifStmt.body.statements)};
 			else if (expressionAlwaysFalse(*_ifStmt.condition))
 				return {vector<Statement>{}};
 			return {};
 		},
-		[&](Switch& _switchStmt) -> OptionalStatements {
+		[&](Switch& _switchStmt) -> OptionalStatements
+		{
 			if (std::optional<u256> const constExprVal = hasLiteralValue(*_switchStmt.expression))
 				return replaceConstArgSwitch(_switchStmt, constExprVal.value());
 			return {};
 		},
-		[&](ForLoop& _forLoop) -> OptionalStatements {
+		[&](ForLoop& _forLoop) -> OptionalStatements
+		{
 			if (expressionAlwaysFalse(*_forLoop.condition))
 				return {std::move(_forLoop.pre.statements)};
 			return {};
-		}
-	};
+		},
+		[&](FunctionDefinition& _funcDef) -> OptionalStatements
+		{
+			if (blockHasIfTerminationFlow(_funcDef.body))
+			{
+				return simplifyBlockTrailingIfTermination(_funcDef);
+			}
+			return {};
+
+			if (!_funcDef.body.statements.empty())
+			{
+				Statement& lastStmt = _funcDef.body.statements.back();
+				return std::visit(
+					util::GenericVisitor{
+						[&](If& _ifStmt) -> OptionalStatements
+						{
+							if (_ifStmt.body.statements.size() == 1)
+							{
+								Statement const& _lastIfStmt = _ifStmt.body.statements.back();
+								bool hasLeave = std::visit(
+									util::GenericVisitor{
+										[&](Leave const&) -> bool { return true; },
+										[&](auto const&) -> bool { return false; },
+									},
+									_lastIfStmt);
+								if (hasLeave)
+								{
+									_funcDef.body.statements.pop_back();
+									return {util::make_vector<Statement>(std::move(_funcDef))};
+								}
+							}
+							return {};
+						},
+
+						[&](auto const&) -> OptionalStatements { return {}; },
+
+					},
+					lastStmt);
+			}
+			return {};
+		}};
 
 	util::iterateReplacing(
 		_statements,
@@ -124,6 +197,5 @@ void StructuralSimplifier::simplify(std::vector<yul::Statement>& _statements)
 			else
 				visit(_stmt);
 			return result;
-		}
-	);
+		});
 }
