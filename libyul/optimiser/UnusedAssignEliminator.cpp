@@ -87,35 +87,6 @@ void UnusedAssignEliminator::operator()(Block const& _block)
 	ScopedSaveAndRestore outerDeclaredVariables(m_declaredVariables, {});
 	TrackedStores beforeBlockVisitStores{m_stores};
 
-	// TODO 2nd parameter was &m_controlFlowSideEffects <- does it matter?
-
-	// TODO do side effects matter?
-	if (!_block.statements.empty())
-	{
-		TerminationFinder::ControlFlow controlFlowKind = TerminationFinder{this->m_dialect}.controlFlowKind(
-			_block.statements.back()); // == TerminationFinder::ControlFlow::FlowOut;
-		if (controlFlowKind == TerminationFinder::ControlFlow::Terminate)
-		{
-			cout << "am gasit termination Terminate\n";
-		}
-		else if (controlFlowKind == TerminationFinder::ControlFlow::FlowOut)
-		{
-			cout << "am gasit termination FlowOut\n";
-		}
-		else if (controlFlowKind == TerminationFinder::ControlFlow::Leave)
-		{
-			cout << "am gasit termination Leave\n";
-		}
-		else
-		{
-			cout << "Am gasit un alt fel de termination\n";
-		}
-	}
-	else
-	{
-		cout << "block has no statements\n";
-	}
-
 	UnusedStoreBase::operator()(_block);
 
 	if (!_block.statements.empty() && this->blockHasTerminationFlow(_block))
@@ -123,19 +94,11 @@ void UnusedAssignEliminator::operator()(Block const& _block)
 		this->setNewBlockAssignmentsToUnused(beforeBlockVisitStores, this->m_stores);
 	}
 
-	cout << "Printing tracked stores before UnusedStoreBase visited...\n";
-	UnusedAssignEliminator::printTrackedStores(beforeBlockVisitStores);
-	cout << "Printing tracked stores after UnusedStoreBase visited...\n";
-	UnusedAssignEliminator::printTrackedStores(this->m_stores);
-
-
-	// cout << "Printing declared variables after UnusedStoreBase visited...\n";
-	// for (auto it = this->m_declaredVariables.begin(); it != this->m_declaredVariables.end(); it++) {
-	// 	cout << (*it).str() << " ";
-	// }
-	// cout << "\n";
-
-	cout << "\n\n\n";
+	// cout << "Printing tracked stores before UnusedStoreBase visited...\n";
+	// UnusedAssignEliminator::inspectTrackedStores(beforeBlockVisitStores);
+	// cout << "Printing tracked stores after UnusedStoreBase visited...\n";
+	// UnusedAssignEliminator::inspectTrackedStores(this->m_stores);
+	// cout << "\n\n\n";
 
 	for (auto const& var: m_declaredVariables)
 		finalize(var, State::Unused);
@@ -145,45 +108,15 @@ void UnusedAssignEliminator::visit(Statement const& _statement)
 {
 	UnusedStoreBase::visit(_statement);
 
-	// LEFT: , , , Switch, ForLoop, Break, Continue, Leave, Block
-	// std::visit(
-	// 	[](const auto& var)
-	// 	{
-	// 		if constexpr (std::is_same_v<std::decay_t<decltype(var)>, ExpressionStatement>)
-	// 		{
-	// 			cout << "am un ExpressionStatement\n";
-	// 		}
-	// 		else if constexpr (std::is_same_v<std::decay_t<decltype(var)>, Assignment>)
-	// 		{
-	// 			cout << "am un Assignment\n";
-	// 			cout << AsmPrinter()(var) << "\n";
-	// 		}
-	// 		else if constexpr (std::is_same_v<std::decay_t<decltype(var)>, VariableDeclaration>)
-	// 		{
-	// 			cout << "am un VariableDeclaration\n";
-	// 			cout << AsmPrinter()(var) << "\n";
-	// 		}
-	// 		else if constexpr (std::is_same_v<std::decay_t<decltype(var)>, FunctionDefinition>)
-	// 		{
-	// 			cout << "am un FunctionDefinition\n";
-	// 		}
-	// 		else if constexpr (std::is_same_v<std::decay_t<decltype(var)>, If>)
-	// 		{
-	// 			cout << "am un If\n";
-	// 		}
-	// 	},
-	// 	_statement);
-
 	if (auto const* assignment = get_if<Assignment>(&_statement))
 		if (assignment->variableNames.size() == 1)
 		{
 			// Default-construct it in "Undecided" state if it does not yet exist.
 			m_stores[assignment->variableNames.front().name][&_statement];
-			cout << "am adaugat new assignment in m_stores " << assignment->variableNames.front().name.str() << "\n";
 		}
 }
 
-// TODO anything to do here?
+
 void UnusedAssignEliminator::shortcutNestedLoop(TrackedStores const& _zeroRuns)
 {
 	// Shortcut to avoid horrible runtime:
@@ -243,6 +176,13 @@ void UnusedAssignEliminator::finalize(YulString _variable, UnusedAssignEliminato
 void UnusedAssignEliminator::setNewBlockAssignmentsToUnused(
 	TrackedStores const& outerScopeStores, TrackedStores& blockScopeStores)
 {
+	// cout << "Setting new block assignments to unused...\n";
+	// cout << "Return variables are:\n";
+	// for (auto it = this->m_returnVariables.begin(); it != this->m_returnVariables.end(); it++){
+	// 	cout << (*it).str() << " ";
+	// }
+	// cout << "\n";
+
 	for (auto it = blockScopeStores.begin(); it != blockScopeStores.end(); it++)
 	{
 		auto varName = it->first;
@@ -250,11 +190,8 @@ void UnusedAssignEliminator::setNewBlockAssignmentsToUnused(
 		{
 			// the block declared a new variable
 			// nothing to do here – if unused, will be cleaned up by UnusedPruner
-			// TODO test that this is so
 		}
 		else
-		// TODO ce se intampla daca am acelasi assignment si in outer scope, si in block scope?
-		// acelasi gen aceeasi_var = aceeasi_val
 		{
 			// search for new assignments
 			std::map<Statement const*, State> blockScopeStatements = blockScopeStores.at(varName);
@@ -267,9 +204,6 @@ void UnusedAssignEliminator::setNewBlockAssignmentsToUnused(
 				{
 					if (std::strcmp(stmtIterator->second.getValue(), "Undecided") == 0)
 					{
-						std::visit(
-							[](const auto& var) { cout << "marked statement " << AsmPrinter()(var) << " as unused\n"; },
-							*stmt);
 						blockScopeStatements[stmt] = State::Unused;
 						blockScopeStores[varName] = blockScopeStatements;
 					}
@@ -282,12 +216,13 @@ void UnusedAssignEliminator::setNewBlockAssignmentsToUnused(
 bool UnusedAssignEliminator::blockHasTerminationFlow(Block const& _block)
 {
 	return TerminationFinder{this->m_dialect}.controlFlowKind(_block.statements.back())
-		   == TerminationFinder::ControlFlow::Leave;
-	// TODO also account for revert / stop instructions
+			   == TerminationFinder::ControlFlow::Leave
+		   || TerminationFinder{this->m_dialect}.controlFlowKind(_block.statements.back())
+				  == TerminationFinder::ControlFlow::Terminate;
 }
 
 
-void UnusedAssignEliminator::printTrackedStores(TrackedStores const& stores)
+void UnusedAssignEliminator::inspectTrackedStores(TrackedStores const& stores)
 {
 	for (auto it = stores.begin(); it != stores.end(); it++)
 	{
