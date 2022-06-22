@@ -13,17 +13,4 @@
 // ----
 // step: fullSuite
 //
-// {
-//     {
-//         f()
-//         f()
-//         f()
-//         sstore(0, 1)
-//     }
-//     function f()
-//     {
-//         let a := calldataload(0)
-//         mstore(a, 0)
-//         if iszero(a) { leave }
-//     }
-// }
+// { { sstore(0, 1) } }

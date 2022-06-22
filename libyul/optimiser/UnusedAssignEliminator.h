@@ -26,6 +26,8 @@
 #include <libyul/optimiser/ASTWalker.h>
 #include <libyul/optimiser/OptimiserStep.h>
 #include <libyul/optimiser/UnusedStoreBase.h>
+#include <libyul/optimiser/Semantics.h>
+
 
 #include <map>
 #include <vector>
@@ -137,7 +139,8 @@ private:
 
 	bool blockHasTerminationFlow(Block const&);
 	void setNewBlockAssignmentsToUnused(TrackedStores const&, TrackedStores&);
-	void printTrackedStores(TrackedStores const&);
+	void inspectTrackedStores(TrackedStores const&);
+	TerminationFinder::ControlFlow findControlFlowType(Statement const&);
 
 
 	std::set<YulString> m_declaredVariables;

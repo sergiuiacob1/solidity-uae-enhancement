@@ -213,12 +213,35 @@ void UnusedAssignEliminator::setNewBlockAssignmentsToUnused(
 	}
 }
 
+TerminationFinder::ControlFlow UnusedAssignEliminator::findControlFlowType(Statement const& _statement)
+{
+	TerminationFinder terminationFinder{this->m_dialect};
+	if (holds_alternative<VariableDeclaration>(_statement) && std::get<VariableDeclaration>(_statement).value
+		&& terminationFinder.containsNonContinuingFunctionCall(*std::get<VariableDeclaration>(_statement).value))
+		return TerminationFinder::ControlFlow::Terminate;
+	else if (
+		holds_alternative<Assignment>(_statement)
+		&& terminationFinder.containsNonContinuingFunctionCall(*std::get<Assignment>(_statement).value))
+		return TerminationFinder::ControlFlow::Terminate;
+	else if (
+		holds_alternative<ExpressionStatement>(_statement)
+		&& terminationFinder.containsNonContinuingFunctionCall(std::get<ExpressionStatement>(_statement).expression))
+		return TerminationFinder::ControlFlow::Terminate;
+	else if (holds_alternative<Break>(_statement))
+		return TerminationFinder::ControlFlow::Break;
+	else if (holds_alternative<Continue>(_statement))
+		return TerminationFinder::ControlFlow::Continue;
+	else if (holds_alternative<Leave>(_statement))
+		return TerminationFinder::ControlFlow::Leave;
+	else
+		return TerminationFinder::ControlFlow::FlowOut;
+}
+
+
 bool UnusedAssignEliminator::blockHasTerminationFlow(Block const& _block)
 {
-	return TerminationFinder{this->m_dialect}.controlFlowKind(_block.statements.back())
-			   == TerminationFinder::ControlFlow::Leave
-		   || TerminationFinder{this->m_dialect}.controlFlowKind(_block.statements.back())
-				  == TerminationFinder::ControlFlow::Terminate;
+	return findControlFlowType(_block.statements.back()) == TerminationFinder::ControlFlow::Leave
+		   || findControlFlowType(_block.statements.back()) == TerminationFinder::ControlFlow::Terminate;
 }
 
 
